@@ -14,7 +14,7 @@ const defaults = {
 	categories: [{"name":"* SUBJECT TO CHANGE *","id":"134"},{"name":"PPV | SPECIAL EVENTS","id":"24"},{"name":"24/7","id":"46"},{"name":"24/7 KIDS","id":"201"},{"name":"24/7 IN HOUSE","id":"227"},{"name":"USA CHANNELS","id":"37"},{"name":"USA 2 CHANNELS","id":"216"},{"name":"USA SD CHANNELS","id":"200"},{"name":"LOCAL CHANNELS","id":"214"},{"name":"CANADIAN CHANNELS","id":"239"},{"name":"INTERNATIONAL CHANNELS","id":"182"},{"name":"UK CHANNELS","id":"44"},{"name":"UK SD CHANNELS","id":"225"},{"name":"MARCH MADNESS","id":"238"},{"name":"MLB CHANNELS","id":"233"},{"name":"NASCAR","id":"229"},{"name":"NBA LEAGUE PASS","id":"88"},{"name":"NFL SUNDAY TICKET","id":"197"},{"name":"NHL HOCKEY","id":"56"},{"name":"ESPN SPORTS","id":"195"},{"name":"MUSIC CHOICE VIDEO","id":"140"},{"name":"PLUTO TV RADIO","id":"194"},{"name":"RADIO CHANNELS","id":"101"},{"name":"RELIGION CHANNELS","id":"219"},{"name":"WORLD WEBCAMS","id":"209"},{"name":"xxx CHANNELS xxx","id":"18"},{"name":"TEST CHANNELS","id":"85"}]
 }
 
-
+let genres = []
 let categories = []
 let catalogs = []
 const channels = {}
@@ -47,15 +47,28 @@ setEndpoint(config.host || defaults.endpoint)
 
 function setCatalogs(cats) {
 	categories = cats
-	catalogs = []
-	cats.forEach(cat => {
-		catalogs.push({
-			id: defaults.prefix + 'cat_' + cat.id,
-			name: cat.name,
-			type: 'tv',
-			extra: [ { name: 'search' } ]
+	if (config.noFilters) {
+		catalogs = []
+		cats.forEach(cat => {
+			catalogs.push({
+				id: defaults.prefix + 'cat_' + cat.id,
+				name: cat.name,
+				type: 'tv',
+				extra: [ { name: 'search' } ]
+			})
 		})
-	})
+	} else {
+		genres = defaults.categories.map(el => { return el.name })
+		catalogs = [
+			{
+				id: defaults.prefix + '_cat',
+				name: defaults.name,
+				type: 'tv',
+				genres,
+				extra: [{ name: 'genre' }]
+			}
+		]
+	}
 	return true
 }
 
@@ -154,8 +167,24 @@ function findMeta(id) {
 	return meta
 }
 
-function getCatalog(reqId, cb) {
-	const id = reqId.replace(defaults.prefix + 'cat_', '')
+function getCatalog(args, cb) {
+	let id
+	if (config.noFilters) {
+		id = args.id.replace(defaults.prefix + 'cat_', '')
+	} else {
+		const genre = (args.extra || {}).genre
+		if (genre)
+			categories.some(el => {
+				if (el.name == genre) {
+					id = el.id
+					return true
+				}
+			})
+		if (!id) {
+			reject(defaults.name + ' - Could not get id for request')
+			return
+		}
+	}
 	if (channels[id] && channels[id].length)
 		cb(channels[id])
 	else {
@@ -241,7 +270,7 @@ async function retrieveRouter() {
 	builder.defineCatalogHandler(args => {
 		return new Promise((resolve, reject) => {
 			const extra = args.extra || {}
-			getCatalog(args.id, catalog => {
+			getCatalog(args, catalog => {
 				if (catalog) {
 					let results = catalog
 					if (extra.search)
@@ -283,3 +312,5 @@ async function retrieveRouter() {
 }
 
 module.exports = retrieveRouter()
+
+
